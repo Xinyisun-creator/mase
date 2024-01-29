@@ -47,7 +47,7 @@ def load_graph_module_ckpt(checkpoint: str):
 
 
 def load_model(
-    load_name: str, load_type: str = "mz", model: torch.nn.Module = None
+    load_name: str, load_type: str = "pl", model: torch.nn.Module = None
 ) -> torch.nn.Module | torch.fx.GraphModule:
     """Load a pytorch/lightning/mase checkpoint to a model.
 
@@ -84,9 +84,9 @@ def load_model(
         )
         logger.info(f"Loaded pytorch lightning checkpoint from {load_name}")
     else:
-        assert load_name.endswith(
-            ".mz"
-        ), f"Invalid extension for 'load_type=mz': {load_name}, must be a '.mz' file, but got {load_name}."
+        # assert load_name.endswith(
+        #     ".mz"
+        # ), f"Invalid extension for 'load_type=mz': {load_name}, must be a '.mz' file, but got {load_name}."
 
         model = load_graph_module_ckpt(checkpoint=load_name)
         logger.info(f"Loaded mase checkpoint from {load_name}")
