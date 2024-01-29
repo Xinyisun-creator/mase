@@ -4,6 +4,37 @@ Jet Substructure Models used in the LogicNets paper
 
 import torch.nn as nn
 
+## JSC_Lab1: Used for Lab1: Train your own network
+class JSC_Lab1(nn.Module):
+    def __init__(self, info):
+        super(JSC_Lab1, self).__init__()
+        self.seq_blocks = nn.Sequential(
+            # 1st LogicNets Layer
+            nn.BatchNorm1d(16),
+            nn.ReLU(),
+            nn.Linear(16, 64),  
+            nn.BatchNorm1d(64),
+            nn.ReLU(),
+            # 2nd
+            nn.Linear(64, 64),
+            nn.BatchNorm1d(64),
+            nn.ReLU(),
+            # 3rd
+            nn.Linear(64, 32),  
+            nn.BatchNorm1d(32),
+            nn.ReLU(),
+            # 4th
+            nn.Linear(32, 32),
+            nn.BatchNorm1d(32),
+            nn.ReLU(),
+            # 5th
+            nn.Linear(32, 5),  
+            nn.BatchNorm1d(5),
+            nn.ReLU(5),
+        )
+
+    def forward(self, x):
+        return self.seq_blocks(x)
 
 class JSC_Toy(nn.Module):
     def __init__(self, info):
@@ -94,3 +125,6 @@ def get_jsc_tiny(info):
 
 def get_jsc_s(info):
     return JSC_S(info)
+
+def get_jsc_lab1(info):
+    return JSC_Lab1(info)
