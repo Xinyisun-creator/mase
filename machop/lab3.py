@@ -32,6 +32,7 @@ from chop.passes.graph.transforms import (
     summarize_quantization_analysis_pass,
 )
 
+from lab2_op_floppass import flop_calculator_pass,modlesize_calculator_pass
 
 logger = get_logger("chop")
 logger.setLevel(logging.INFO)
@@ -127,6 +128,11 @@ num_batchs = 5
 # in this case, it is a simple brute force search
 
 recorded_accs = []
+record_flop_linear = []
+record_flop_relu = []
+record_flop_norm1d= []
+record_linear_size = []
+record_norm1d_size = []
 for i, config in enumerate(search_spaces):
     mg, _ = quantize_transform_pass(mg, config)
     j = 0
@@ -144,6 +150,21 @@ for i, config in enumerate(search_spaces):
         if j > num_batchs:
             break
         j += 1
+    flops_linear, flops_relu, flops_norm1d = flop_calculator_pass(mg,None)
+    linear_size,norm1d_size = modlesize_calculator_pass(mg,None)
     acc_avg = sum(accs) / len(accs)
     loss_avg = sum(losses) / len(losses)
     recorded_accs.append(acc_avg)
+    ## the FLOP wouldn't change since the CNN structure remain the same.
+    record_flop_linear.append(flops_linear)
+    record_flop_relu.append(flops_relu)
+    record_flop_norm1d.append(flops_norm1d)
+    record_linear_size.append(linear_size)
+    record_norm1d_size.append(norm1d_size)
+
+print("recorded_accs",recorded_accs,"\n")
+print("record_linear_size",record_linear_size,"\n")
+print("record_norm1d_size",record_norm1d_size,"\n")
+# print("record_flop_linear",record_flop_linear,"\n")
+# print("record_flop_relu",record_flop_relu,"\n")
+# print("record_flop_norm1d",record_flop_norm1d,"\n")
