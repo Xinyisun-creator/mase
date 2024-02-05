@@ -56,8 +56,14 @@ class RunnerAvgBitwidth(HWRunnerBase):
         else:
             pass_model = model
         # compose hardware analysis passes here
+<<<<<<< HEAD
         _, metrics = calculate_avg_bits_module_analysis_pass(pass_model, metrics)
         metrics["memory_density"] = (
             self.config["compare_to"] / metrics["average_bitwidth"]
         )
+=======
+        _, info = calculate_avg_bits_module_analysis_pass(pass_model, metrics)
+        metrics["average_bitwidth"] = info["average_bitwidth"]
+        metrics["memory_density"] = self.config["compare_to"] / info["average_bitwidth"]
+>>>>>>> main
         return metrics
