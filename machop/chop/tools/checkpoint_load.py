@@ -47,7 +47,7 @@ def load_graph_module_ckpt(checkpoint: str):
 
 
 def load_model(
-    load_name: str, load_type: str = "pl", model: torch.nn.Module = None
+    load_name: str, load_type: str = "pt", model: torch.nn.Module = None
 ) -> torch.nn.Module | torch.fx.GraphModule:
     """Load a pytorch/lightning/mase checkpoint to a model.
 

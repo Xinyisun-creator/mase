@@ -35,6 +35,9 @@ class GraphSearchSpaceMixedPrecisionPTQ(SearchSpaceBase):
     """
 
     def _post_init_setup(self):
+        # print(self.model)
+        # import pdb
+        # pdb.set_trace()
         self.model.to("cpu")  # save this copy of the model to cpu
         self.mg = None
         self._node_info = None

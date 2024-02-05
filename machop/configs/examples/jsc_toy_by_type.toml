@@ -11,7 +11,7 @@ project = "jsc-tiny"
 seed = 42
 log_every_n_steps = 5
 # load_name = "../mase_output/toy_toy_tiny/software/training_ckpts/best.ckpt"
-# load_type = "pl"
+load_type = "pl"
 
 [passes.quantize]
 by = "type"
@@ -39,10 +39,12 @@ name = ["NA"]
 [search.search_space.seed.linear.config]
 # if search.search_space.setup.by = "type", this seed will be used to quantize all torch.nn.Linear/ F.linear
 name = ["integer"]
-data_in_width = [4, 8]
-data_in_frac_width = ["NA"] # "NA" means data_in_frac_width = data_in_width // 2
-weight_width = [2, 4, 8]
-weight_frac_width = ["NA"]
+# data_in_width = [4, 8]
+data_in_width = [16, 8, 8, 4]
+data_in_frac_width = [8, 6, 4, 2] # ["NA"]
+# weight_width = [2, 4, 8]
+weight_width = [16, 8, 8, 4]
+weight_frac_width = [8, 6, 4, 2] # ["NA"]
 bias_width = [2, 4, 8]
 bias_frac_width = ["NA"]
 
@@ -50,7 +52,7 @@ bias_frac_width = ["NA"]
 # if search.search_space.setup.by = "name", this seed will be used to quantize the mase graph node with name "seq_blocks_2"
 name = ["integer"]
 data_in_width = [4, 8]
-data_in_frac_width = ["NA"]
+data_in_frac_width = ["NA"] # "NA" means data_in_frac_width = data_in_width // 2
 weight_width = [2, 4, 8]
 weight_frac_width = ["NA"]
 bias_width = [2, 4, 8]
@@ -71,7 +73,8 @@ compare_to = 32 # compare to FP32
 n_jobs = 1
 n_trials = 20
 timeout = 20000
-sampler = "brute-force"
+#sampler = "brute-force"
+sampler = "tpe"
 
 # sum_scaled_metrics = true # single objective
 # direction = "maximize"

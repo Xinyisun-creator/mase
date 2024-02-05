@@ -79,4 +79,7 @@ mg, _ = init_metadata_analysis_pass(mg, None)
 mg, _ = add_common_metadata_analysis_pass(mg, {"dummy_in": dummy_in})
 mg, _ = add_software_metadata_analysis_pass(mg, None)
 
-mg,_ = flop_calculator_pass(mg, None)
+flops_linear,flops_relu,flops_norm1d = flop_calculator_pass(mg, None)
+print(flops_linear)
+print(flops_relu)
+print(flops_norm1d)

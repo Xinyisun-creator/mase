@@ -1,0 +1,49 @@
+# basics
+model = "jsc-lab4"
+dataset = "jsc"
+task = "cls"
+
+max_epochs = 5
+batch_size = 512
+learning_rate = 1e-2
+accelerator = "cpu"
+project = "jsc-lab4"
+seed = 42
+log_every_n_steps = 5
+# load_name = "../mase_output/toy_toy_tiny/software/training_ckpts/best.ckpt"
+load_type = "pl"
+
+## default pass config, which wait to be change by config list
+
+## config list
+
+config_list = [1,2,4,6]
+
+## changed_seq_blocks
+
+changed_seq_blocks=[
+    "seq_blocks_2",
+    "seq_blocks_4",
+    "seq_blocks_6"
+]
+
+[default_pass_config]
+by = "name"
+default.config.name = "NA"
+
+[default_pass_config.seq_blocks_2.config]
+name = "output_only"
+channel_multiplier = 2
+
+[default_pass_config.seq_blocks_4.config]
+name = "both"
+channel_multiplier = 2
+
+[default_pass_config.seq_blocks_6.config]
+name = "input_only"
+channel_multiplier = 2
+
+[passes.quantize]
+by = "type"
+[passes.quantize.default.config]
+name = "NA"

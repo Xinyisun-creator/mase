@@ -151,7 +151,7 @@ for i, config in enumerate(search_spaces):
             break
         j += 1
     flops_linear, flops_relu, flops_norm1d = flop_calculator_pass(mg,None)
-    linear_size,norm1d_size = modlesize_calculator_pass(mg,None)
+    linear_size,norm1d_size,relu_size = modlesize_calculator_pass(mg,None)
     acc_avg = sum(accs) / len(accs)
     loss_avg = sum(losses) / len(losses)
     recorded_accs.append(acc_avg)
@@ -165,6 +165,6 @@ for i, config in enumerate(search_spaces):
 print("recorded_accs",recorded_accs,"\n")
 print("record_linear_size",record_linear_size,"\n")
 print("record_norm1d_size",record_norm1d_size,"\n")
-# print("record_flop_linear",record_flop_linear,"\n")
-# print("record_flop_relu",record_flop_relu,"\n")
-# print("record_flop_norm1d",record_flop_norm1d,"\n")
+print("record_flop_linear",record_flop_linear,"\n")
+print("record_flop_relu",record_flop_relu,"\n")
+print("record_flop_norm1d",record_flop_norm1d,"\n")
