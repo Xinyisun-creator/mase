@@ -34,6 +34,7 @@ def modlesize_calculator_pass(graph,pass_args: dict):
     ##Initiate the FLOP lists
     linear_size = []
     norm1d_size = []
+    relu_size = []
     for node in graph.fx_graph.nodes:
         ## Read parameters
         if node.meta["mase"].parameters["common"]["mase_op"] == "linear":
@@ -43,8 +44,9 @@ def modlesize_calculator_pass(graph,pass_args: dict):
             bias_shape = node.meta["mase"].parameters["common"]["args"]["bias"]["shape"]
             linear_size.append((input_shape[1] * output_shape[1]+bias_shape[0]))
         elif node.meta["mase"].parameters["common"]["mase_op"] == "relu":
-            continue
+            input_shape = node.meta["mase"].parameters["common"]["args"]["data_in_0"]["shape"]
+            relu_size.append(input_shape[1])
         elif node.meta["mase"].parameters["common"]["mase_op"] == "batch_norm1d":
             input_shape = node.meta["mase"].parameters["common"]["args"]["data_in_0"]["shape"]
             norm1d_size.append(input_shape[1] * 2)
-    return linear_size,norm1d_size
+    return linear_size,norm1d_size,relu_size

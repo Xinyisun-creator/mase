@@ -52,6 +52,8 @@ from .actions import test, train, transform, search
 from .dataset import MaseDataModule, AVAILABLE_DATASETS, get_dataset_info
 from .tools import post_parse_load_config, load_config
 
+from .actions.search.lab4_gridsearch import gridsearch
+
 
 # Housekeeping -------------------------------------------------------------------------
 # Use the third-party IPython debugger to handle breakpoints; this debugger features
@@ -95,7 +97,7 @@ LOGO = f"""
         https://github.com/DeepWok/mase/wiki
 """
 TASKS = ["classification", "cls", "translation", "tran", "language_modeling", "lm"]
-ACTIONS = ["train", "test", "transform", "search"]
+ACTIONS = ["train", "test", "transform", "search","gridsearch"]
 INFO_TYPE = ["all", "model", "dataset"]
 LOAD_TYPE = [
     "pt",  # PyTorch module state dictionary
@@ -223,6 +225,9 @@ class ChopCLI:
         # the merged argument table may show None, but this is not the case.
         self.args = post_parse_load_config(args, CLI_DEFAULTS)
 
+        # import pdb
+        # pdb.set_trace()
+
         # Sanity check
         if not self.args.model or not self.args.dataset:
             raise ValueError("No model and/or dataset provided! These are required.")
@@ -234,6 +239,8 @@ class ChopCLI:
             self.dataset_info,
             self.model_info,
         ) = self._setup_model_and_dataset()
+        # import pdb
+        # pdb.set_trace()
         self.output_dir, self.output_dir_sw, self.output_dir_hw = self._setup_folders()
         self.visualizer = self._setup_visualizer()
 
@@ -247,6 +254,8 @@ class ChopCLI:
                 self._run_test()
             case "search":
                 self._run_search()
+            case "gridsearch":
+                self._run_gridsearch()
 
     # Actions --------------------------------------------------------------------------
     def _run_train(self):
@@ -349,6 +358,31 @@ class ChopCLI:
 
         transform(**transform_params)
         self.logger.info("Transformation is completed")
+
+    def _run_gridsearch(self):
+        load_name = None
+        load_types = ["pt", "pl", "mz"]
+        if self.args.load_name is not None and self.args.load_type in load_types:
+            load_name = self.args.load_name
+
+        import pdb
+        pdb.set_trace()
+            
+        search_params = {
+            "model": self.model,
+            "search_config": self.args.config,
+            "model_info": self.model_info,
+            "task": self.args.task,
+            "data_module": self.data_module,
+            "load_name": load_name,
+            "load_type": self.args.load_type,
+        }
+
+        import pdb
+        pdb.set_trace()
+
+        gridsearch(**search_params)
+        self.logger.info("Lab4 grid search is completed")
 
     def _run_search(self):
         load_name = None
@@ -734,6 +768,8 @@ class ChopCLI:
 
     def _setup_model_and_dataset(self):
         self.logger.info(f"Initialising model {self.args.model!r}...")
+        # import pdb
+        # pdb.set_trace()
 
         # Grab the dataset information and model instance functions; as evident in its
         # name, when called, the model instance function creates and returns an instance
