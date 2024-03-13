@@ -85,8 +85,8 @@ pass_args = {
             "data_in_width": 8,
             "data_in_frac_width": 4,
             # weight
-            "weight_width": 1,
-            "weight_frac_width": 0,
+            "weight_width": 8,
+            "weight_frac_width": 4,
             # bias
             "bias_width": 8,
             "bias_frac_width": 4,
@@ -133,9 +133,9 @@ mg, _ = report_node_meta_param_analysis_pass(mg, {"which": ("software",)})
 
 for mg_node, ori_mg_node in zip(mg.fx_graph.nodes, ori_mg.fx_graph.nodes):
     if mg_node.meta["mase"].parameters["common"]["mase_op"] == "linear" and ori_mg_node.meta["mase"].parameters["common"]["mase_op"] == "linear":
-        mg_weight = mg_node.meta["mase"].parameters["common"]["args"]["weight"]
-        ori_mg_weight = ori_mg_node.meta["mase"].parameters["common"]["args"]["weight"]
-        print(f"mg Node: {mg_node.name}, Weight: {mg_weight} \n ori_mg Node: {ori_mg_node.name}, Weight: {ori_mg_weight}")
+        mg_weight = mg_node.meta["mase"].parameters["common"]["args"]["weight"]["precision"]
+        ori_mg_weight = ori_mg_node.meta["mase"].parameters["common"]["args"]["weight"]["precision"]
+        print(f"mg Node: {mg_node.name}, Weight precision: {mg_weight} \n ori_mg Node: {ori_mg_node.name}, Weight precision: {ori_mg_weight}")
 
 # for mg_node, ori_mg_node in zip(mg.fx_graph.nodes, ori_mg.fx_graph.nodes):
 #     if mg_node.op == 'call_module':

@@ -50,6 +50,16 @@ def update_arg(node, arg_name, dtype=None, precision=None, size=None):
     if size is not None:
         node.meta["mase"].parameters["common"]["args"][arg_name]["size"] = size
 
+def TR_update_arg(node, arg_name, dtype=None, precision=None, size=None):
+    if dtype is not None:
+        node.meta["mase"].parameters["common"]["args"][arg_name]["type"] = dtype
+    if precision is not None:
+        node.meta["mase"].parameters["common"]["args"][arg_name][
+            "precision"
+        ] = precision
+    if size is not None:
+        node.meta["mase"].parameters["common"]["args"][arg_name]["size"] = size
+
 
 MASE_OP_TO_INPUT_ENTRIES_AND_ARGS = {
     # entry and arg corresponding to name in software and hardware mapping

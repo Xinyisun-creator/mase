@@ -29,6 +29,7 @@ def create_new_module(
     input_layers=None,
     output_layers=None,
 ):
+    import pdb; pdb.set_trace()
     original_module_cls = type(original_module)
     quant_name = config.get("name")
 
@@ -38,6 +39,7 @@ def create_new_module(
         )
 
     if mase_op == "linear":
+        import pdb; pdb.set_trace()
         new_module_cls = quantized_module_map[f"linear_{quant_name}"]
         use_bias = original_module.bias is not None
         # NOTE: We don't support training with pruning on base module. Only quantized modules for now.
@@ -51,6 +53,7 @@ def create_new_module(
             bias=use_bias,
             config=config,
         )
+        import pdb; pdb.set_trace()
         if quant_name == "lutnet":
             initialized_weight, pruning_masks = init_LinearLUT_weight(
                 levels=new_module.levels,

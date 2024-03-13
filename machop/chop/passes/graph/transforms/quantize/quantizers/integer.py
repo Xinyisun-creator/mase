@@ -88,4 +88,5 @@ def integer_fraction(
     int_width = int(log2(max(0.5, max_half_range))) + 2
     frac_width = max(0, width - int_width)
     frac_width = max(filter(lambda x: x <= frac_width, frac_choices))
+    import pdb; pdb.set_trace()
     return frac_width

@@ -3,6 +3,7 @@ import logging
 import os
 from pathlib import Path
 from pprint import pprint as pp
+import time
 
 # figure out the correct path
 # machop_path = Path(".").resolve().parent.parent /"machop"
@@ -133,6 +134,9 @@ record_flop_relu = []
 record_flop_norm1d= []
 record_linear_size = []
 record_norm1d_size = []
+othertime = []
+
+start_time = time.time()
 for i, config in enumerate(search_spaces):
     mg, _ = quantize_transform_pass(mg, config)
     j = 0
@@ -150,17 +154,24 @@ for i, config in enumerate(search_spaces):
         if j > num_batchs:
             break
         j += 1
-    flops_linear, flops_relu, flops_norm1d = flop_calculator_pass(mg,None)
-    linear_size,norm1d_size,relu_size = modlesize_calculator_pass(mg,None)
     acc_avg = sum(accs) / len(accs)
     loss_avg = sum(losses) / len(losses)
     recorded_accs.append(acc_avg)
+    start_other_time = time.time()
     ## the FLOP wouldn't change since the CNN structure remain the same.
+    flops_linear, flops_relu, flops_norm1d = flop_calculator_pass(mg,None)
+    linear_size,norm1d_size,relu_size = modlesize_calculator_pass(mg,None)
     record_flop_linear.append(flops_linear)
     record_flop_relu.append(flops_relu)
     record_flop_norm1d.append(flops_norm1d)
     record_linear_size.append(linear_size)
     record_norm1d_size.append(norm1d_size)
+    end_other_time = time.time()
+    othertime.append(start_other_time - end_other_time)
+
+end_time = time.time()
+running_time_all = end_time - start_time
+running_time_acc = end_time - start_time - sum(othertime)
 
 print("recorded_accs",recorded_accs,"\n")
 print("record_linear_size",record_linear_size,"\n")
@@ -168,3 +179,6 @@ print("record_norm1d_size",record_norm1d_size,"\n")
 print("record_flop_linear",record_flop_linear,"\n")
 print("record_flop_relu",record_flop_relu,"\n")
 print("record_flop_norm1d",record_flop_norm1d,"\n")
+
+print("running_time_all:",running_time_all)
+print("running_time_acc:",running_time_acc)

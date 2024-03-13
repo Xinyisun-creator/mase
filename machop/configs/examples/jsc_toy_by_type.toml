@@ -51,11 +51,11 @@ bias_frac_width = ["NA"]
 [search.search_space.seed.seq_blocks_2.config]
 # if search.search_space.setup.by = "name", this seed will be used to quantize the mase graph node with name "seq_blocks_2"
 name = ["integer"]
-data_in_width = [4, 8]
+data_in_width = [2, 4, 6, 8, 10]
 data_in_frac_width = ["NA"] # "NA" means data_in_frac_width = data_in_width // 2
-weight_width = [2, 4, 8]
+weight_width = [2, 4, 6, 8, 10]
 weight_frac_width = ["NA"]
-bias_width = [2, 4, 8]
+bias_width = [2, 4, 6, 8, 10]
 bias_frac_width = ["NA"]
 
 [search.strategy]
@@ -71,10 +71,10 @@ compare_to = 32 # compare to FP32
 
 [search.strategy.setup]
 n_jobs = 1
-n_trials = 20
+n_trials = 125
 timeout = 20000
-#sampler = "brute-force"
-sampler = "tpe"
+sampler = "brute-force"
+#sampler = "tpe"
 
 # sum_scaled_metrics = true # single objective
 # direction = "maximize"

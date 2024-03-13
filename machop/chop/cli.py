@@ -266,7 +266,7 @@ class ChopCLI:
             case "simulate":
                 run_action_fn = self._run_simulate
             case "gridsearch":
-                self._run_gridsearch()
+                run_action_fn = self._run_gridsearch
 
         if run_action_fn is None:
             raise ValueError(f"Unsupported action: {self.args.action}")
@@ -385,9 +385,6 @@ class ChopCLI:
         load_types = ["pt", "pl", "mz"]
         if self.args.load_name is not None and self.args.load_type in load_types:
             load_name = self.args.load_name
-
-        import pdb
-        pdb.set_trace()
             
         search_params = {
             "model": self.model,
@@ -398,9 +395,6 @@ class ChopCLI:
             "load_name": load_name,
             "load_type": self.args.load_type,
         }
-
-        import pdb
-        pdb.set_trace()
 
         gridsearch(**search_params)
         self.logger.info("Lab4 grid search is completed")

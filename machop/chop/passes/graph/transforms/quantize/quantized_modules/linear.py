@@ -4,6 +4,14 @@ import torch
 from torch import Tensor
 from torch.nn import functional as F
 from .utils import get_stats, quantiser_passthrough
+# from math import ceil, log2
+
+# from numpy import ndarray
+# from torch import Tensor
+# import torch
+
+# from .utils import my_clamp, my_round
+
 
 from ..quantizers import (
     residual_sign_quantizer,
@@ -112,9 +120,11 @@ class LinearInteger(_LinearBase):
         self.x_quantizer = partial(
             integer_quantizer, width=x_width, frac_width=x_frac_width
         )
+        import pdb; pdb.set_trace()
         self.b_quantizer = partial(
             integer_quantizer, width=b_width, frac_width=b_frac_width
         )
+        import pdb; pdb.set_trace()
 
     # def get_output_bitwidth(self):
     #     config = self.config

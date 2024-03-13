@@ -71,8 +71,6 @@ def instantiate_linear(in_features, out_features, bias):
 def redefine_linear_transform_pass(graph, pass_args=None):
     main_config = pass_args.pop('config')
     default = main_config.pop('default', None)
-    import pdb
-    pdb.set_trace()
     if default is None:
         raise ValueError(f"default value must be provided.")
     i = 0
@@ -164,8 +162,6 @@ def gridsearch(
     # pdb.set_trace()
 
     for i, config in enumerate(search_spaces):
-        import pdb
-        pdb.set_trace()
         # if i== 6:
         #     import pdb
         #     pdb.set_trace()

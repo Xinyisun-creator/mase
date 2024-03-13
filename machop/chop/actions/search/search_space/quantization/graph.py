@@ -61,13 +61,9 @@ class GraphSearchSpaceMixedPrecisionPTQ(SearchSpaceBase):
             assert self.model_info.is_fx_traceable, "Model must be fx traceable"
             mg = MaseGraph(self.model)
             mg, _ = init_metadata_analysis_pass(mg, None)
-<<<<<<< HEAD
-            mg, _ = add_common_metadata_analysis_pass(mg, {"dummy_in": self.dummy_input})
-=======
             mg, _ = add_common_metadata_analysis_pass(
                 mg, {"dummy_in": self.dummy_input, "force_device_meta": False}
             )
->>>>>>> main
             self.mg = mg
         if sampled_config is not None:
             mg, _ = quantize_transform_pass(self.mg, sampled_config)
@@ -122,7 +118,6 @@ class GraphSearchSpaceMixedPrecisionPTQ(SearchSpaceBase):
                 raise ValueError(
                     f"Unknown quantization by: {self.config['setup']['by']}"
                 )
-
         # flatten the choices and choice_lengths
         flatten_dict(choices, flattened=self.choices_flattened)
         self.choice_lengths_flattened = {

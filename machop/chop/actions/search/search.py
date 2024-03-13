@@ -72,7 +72,11 @@ def search(
         dummy_input=get_dummy_input(model_info, data_module, task, device=device),
         accelerator=accelerator,
     )
+
+
     search_space.build_search_space()
+
+
 
     # construct a search strategy
     strategy_cls = get_search_strategy_cls(strategy_config["name"])

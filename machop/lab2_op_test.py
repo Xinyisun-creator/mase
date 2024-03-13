@@ -27,7 +27,7 @@ from chop.passes.graph.transforms import (
 )
 from chop.ir.graph.mase_graph import MaseGraph
 
-from lab2_op_floppass import flop_calculator_pass
+from lab2_op_floppass import flop_calculator_pass,BitOPs_calculator_pass
 
 set_logging_verbosity("info")
 
@@ -80,6 +80,7 @@ mg, _ = add_common_metadata_analysis_pass(mg, {"dummy_in": dummy_in})
 mg, _ = add_software_metadata_analysis_pass(mg, None)
 
 flops_linear,flops_relu,flops_norm1d = flop_calculator_pass(mg, None)
+# flops_linear,flops_relu,flops_norm1d = BitOPs_calculator_pass(mg, None)
 print(flops_linear)
 print(flops_relu)
 print(flops_norm1d)
