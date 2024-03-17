@@ -190,36 +190,6 @@ accuracy_list.append(acc)
 latency_list.append(latency)
 
 ###
-# Linear Only: Quantize to 16 bites
-###
-
-pass_args = {
-"by": "type",
-"default": {"config": {"name": None}},
-"conv": {
-        "config": {
-            "name": "integer",
-            # data
-            "data_in_width": 16,
-            "data_in_frac_width": 4,
-            # weight
-            "weight_width": 16,
-            "weight_frac_width": 4,
-            # bias
-            "bias_width": 16,
-            "bias_frac_width": 4,
-        }
-},
-}
-
-mg, _ = tensorRT_quantize_pass(mg, pass_args,fake = True)
-mg, _ = calibration_pass(mg, pass_args,data_module,batch_size)
-engine_str_path = './testdemo_engine.trt'
-acc,latency = DEMO_combine_ONNX_and_Engine(mg,dummy_in,data_module.train_dataloader(),input_generator,onnx_model_path = './testdemo.onnx',TR_output_path=engine_str_path)
-accuracy_list.append(acc)
-latency_list.append(latency)
-
-###
 # Linear Only: Quantize to 8 bites
 ###
 
@@ -249,6 +219,35 @@ acc,latency = DEMO_combine_ONNX_and_Engine(mg,dummy_in,data_module.train_dataloa
 accuracy_list.append(acc)
 latency_list.append(latency)
 
+###
+# Linear Only: Quantize to 6 bites
+###
+
+pass_args = {
+"by": "type",
+"default": {"config": {"name": None}},
+"conv": {
+        "config": {
+            "name": "integer",
+            # data
+            "data_in_width": 6,
+            "data_in_frac_width": 4,
+            # weight
+            "weight_width": 6,
+            "weight_frac_width": 4,
+            # bias
+            "bias_width": 6,
+            "bias_frac_width": 4,
+        }
+},
+}
+
+mg, _ = tensorRT_quantize_pass(mg, pass_args,fake = True)
+mg, _ = calibration_pass(mg, pass_args,data_module,batch_size)
+engine_str_path = './testdemo_engine.trt'
+acc,latency = DEMO_combine_ONNX_and_Engine(mg,dummy_in,data_module.train_dataloader(),input_generator,onnx_model_path = './testdemo.onnx',TR_output_path=engine_str_path)
+accuracy_list.append(acc)
+latency_list.append(latency)
 
 ###
 # Linear Only: Quantize to 16 bites
