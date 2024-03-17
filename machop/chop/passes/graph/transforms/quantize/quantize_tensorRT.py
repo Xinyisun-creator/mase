@@ -273,7 +273,6 @@ def test_quantize_tensorrt_transform_pass(dataloader, engine_str_path,model_name
     print("Total accuracy: %.2f%%" % (sum(accuracy) / len(accuracy) * 100))
 
 
-
 def DEMO_combine_ONNX_and_Engine(mg,dummy_in,dataloader,input_generator,onnx_model_path,TR_output_path):
     dummy_in = next(iter(input_generator))['x']
     dummy_in = dummy_in.cuda()
@@ -296,12 +295,9 @@ def DEMO_combine_ONNX_and_Engine(mg,dummy_in,dataloader,input_generator,onnx_mod
         for error in range(parser.num_errors):
             print(parser.get_error(error))
 
-    # print(parser.parse(onnx_model.SerializeToString()))
     inputTensor = network.get_input(0)
     profile.set_shape(inputTensor.name, (1,) + inputTensor.shape[1:], (8,) + inputTensor.shape[1:], (32,) + inputTensor.shape[1:])
     config.add_optimization_profile(profile)
-
-    import pdb; pdb.set_trace()
 
     engineString = builder.build_serialized_network(network, config)
     builder.build_engine(network, config)
@@ -309,23 +305,108 @@ def DEMO_combine_ONNX_and_Engine(mg,dummy_in,dataloader,input_generator,onnx_mod
     with open(TR_output_path, 'wb') as f:
         f.write(engineString)
 
-    import pdb; pdb.set_trace()
-
     with open(TR_output_path, "rb") as f:
         engine = trt.Runtime(logger).deserialize_cuda_engine(f.read())
 
-    # engine = runtime.deserialize_cuda_engine(engine_str)
     context = engine.create_execution_context()
 
     nIO = engine.num_io_tensors
     lTensorName = [engine.get_tensor_name(i) for i in range(nIO)]
     nInput = [engine.get_tensor_mode(lTensorName[i]) for i in range(nIO)].count(trt.TensorIOMode.INPUT)
 
-    # context = engine.create_execution_context()
     dataiter = iter(dataloader)
     input, labels = next(dataiter)
-    # if model_name == "vgg7":
-    #     input.requires_grad_(True)
+    input_shape = input.shape
+    context.set_input_shape(lTensorName[0], input_shape)
+    for i in range(nIO):
+        print("[%2d]%s->" % (i, "Input " if i < nInput else "Output"), engine.get_tensor_dtype(lTensorName[i]), engine.get_tensor_shape(lTensorName[i]), context.get_tensor_shape(lTensorName[i]), lTensorName[i])
+
+    execute_time = []
+    accuracy = []
+
+    for inputs in dataloader:
+        data, label = inputs
+        bufferH = []
+        bufferH.append(np.ascontiguousarray(data))
+        for i in range(nInput, nIO):
+            ####记得改成np.zeros
+            bufferH.append(np.empty(context.get_tensor_shape(lTensorName[i]), dtype=trt.nptype(engine.get_tensor_dtype(lTensorName[i]))))
+        bufferD = []
+        for i in range(nIO):
+            bufferD.append(cudart.cudaMalloc(bufferH[i].nbytes)[1])
+
+        for i in range(nInput):
+            cudart.cudaMemcpy(bufferD[i], bufferH[i].ctypes.data, bufferH[i].nbytes, cudart.cudaMemcpyKind.cudaMemcpyHostToDevice)
+
+        for i in range(nIO):
+            context.set_tensor_address(lTensorName[i], int(bufferD[i]))
+
+        start_time = time.time()
+        context.execute_async_v3(0)
+        end_time = time.time()
+        execute_time.append(end_time - start_time)
+
+        for i in range(nInput, nIO):
+            cudart.cudaMemcpy(bufferH[i].ctypes.data, bufferD[i], bufferH[i].nbytes, cudart.cudaMemcpyKind.cudaMemcpyDeviceToHost)
+            categories = np.argmax(bufferH[nInput], axis=1)
+            # print(categories, label)
+            acc = np.sum(categories == np.array(label)) / len(label)
+            # print("Accuracy: %.2f%%" % (acc * 100))
+            accuracy.append(acc)
+
+            for b in bufferD:
+                cudart.cudaFree(b)
+
+
+    print("Succeeded running model in TensorRT!")
+    print("Average execute time for one batch: %.2fms" % (sum(execute_time) / len(execute_time) * 1000))
+    print("Total accuracy: %.2f%%" % (sum(accuracy) / len(accuracy) * 100))
+    return (sum(accuracy) / len(accuracy) * 100),(sum(execute_time) / len(execute_time) * 1000)
+
+
+def DEMO_combine_ONNX_and_Engine_run_all_files(mg,dummy_in,dataloader,input_generator,onnx_model_path,TR_output_path):
+    dummy_in = next(iter(input_generator))['x']
+    dummy_in = dummy_in.cuda()
+    torch.onnx.export(mg.model.cuda(),  dummy_in.cuda(), onnx_model_path, export_params=True, opset_version=13, do_constant_folding=True, \
+                        input_names = ['input'], output_names = ['output'], dynamic_axes={'input' : {0 : 'batch_size'}, 'output' : {0 : 'batch_size'}})
+    
+    logger = trt.Logger(trt.Logger.ERROR)
+    builder = trt.Builder(logger)
+    network = builder.create_network(1 << int(trt.NetworkDefinitionCreationFlag.EXPLICIT_BATCH))
+
+    ## ONLY test for the DEMO
+    profile = builder.create_optimization_profile()
+    config = builder.create_builder_config()
+    config.set_flag(trt.BuilderFlag.FP16)
+    parser = trt.OnnxParser(network, logger)
+    # config.set_flag(trt.BuilderFlag.INT8)
+    # Parse the ONNX model
+    with open(onnx_model_path, 'rb') as model:
+        print("parser.parse(model.read()): ",str(parser.parse(model.read())))
+        for error in range(parser.num_errors):
+            print(parser.get_error(error))
+
+    inputTensor = network.get_input(0)
+    profile.set_shape(inputTensor.name, (1,) + inputTensor.shape[1:], (8,) + inputTensor.shape[1:], (32,) + inputTensor.shape[1:])
+    config.add_optimization_profile(profile)
+
+    engineString = builder.build_serialized_network(network, config)
+    builder.build_engine(network, config)
+
+    with open(TR_output_path, 'wb') as f:
+        f.write(engineString)
+
+    with open(TR_output_path, "rb") as f:
+        engine = trt.Runtime(logger).deserialize_cuda_engine(f.read())
+
+    context = engine.create_execution_context()
+
+    nIO = engine.num_io_tensors
+    lTensorName = [engine.get_tensor_name(i) for i in range(nIO)]
+    nInput = [engine.get_tensor_mode(lTensorName[i]) for i in range(nIO)].count(trt.TensorIOMode.INPUT)
+
+    dataiter = iter(dataloader)
+    input, labels = next(dataiter)
     input_shape = input.shape
     context.set_input_shape(lTensorName[0], input_shape)
     for i in range(nIO):
@@ -344,9 +425,6 @@ def DEMO_combine_ONNX_and_Engine(mg,dummy_in,dataloader,input_generator,onnx_mod
         for i in range(nIO):
             bufferD.append(cudart.cudaMalloc(bufferH[i].nbytes)[1])
 
-        # for i in range(nInput):
-        #     cudart.cudaMemcpy(bufferD[i], bufferH[i].ctypes.data, bufferH[i].nbytes, cudart.cudaMemcpyKind.cudaMemcpyHostToDevice)
-
         for i in range(nInput):
             cudart.cudaMemcpy(bufferD[i], bufferH[i].ctypes.data, bufferH[i].nbytes, cudart.cudaMemcpyKind.cudaMemcpyHostToDevice)
 
@@ -355,12 +433,10 @@ def DEMO_combine_ONNX_and_Engine(mg,dummy_in,dataloader,input_generator,onnx_mod
 
     start_time = time.time()
     context.execute_async_v3(0)
-    execute_time.append(time.time() - start_time)
-
-    import pdb; pdb.set_trace()
+    end_time = time.time()
+    execute_time.append(end_time - start_time)
 
     for i in range(nInput, nIO):
-        import pdb; pdb.set_trace()
         cudart.cudaMemcpy(bufferH[i].ctypes.data, bufferD[i], bufferH[i].nbytes, cudart.cudaMemcpyKind.cudaMemcpyDeviceToHost)
         categories = np.argmax(bufferH[nInput], axis=1)
         # print(categories, label)
@@ -375,5 +451,58 @@ def DEMO_combine_ONNX_and_Engine(mg,dummy_in,dataloader,input_generator,onnx_mod
     print("Succeeded running model in TensorRT!")
     print("Average execute time for one batch: %.2fms" % (sum(execute_time) / len(execute_time) * 1000))
     print("Total accuracy: %.2f%%" % (sum(accuracy) / len(accuracy) * 100))
-    return mg, {}, builder.build_engine(network, config)
+    return (sum(accuracy) / len(accuracy) * 100),(sum(execute_time) / len(execute_time) * 1000)
+
+
+#########################################################################################
+# Change the DEMO into ELEGANT code below
+#########################################################################################
     
+def export_onnx_and_tensorrt_engine_pass(mg, dummy_in, input_generator, onnx_model_path,TR_output_path):
+    dummy_in = next(iter(input_generator))['x']
+    dummy_in = dummy_in.cuda()
+    torch.onnx.export(mg.model.cuda(),  dummy_in.cuda(), onnx_model_path, export_params=True, opset_version=13, do_constant_folding=True, \
+                        input_names = ['input'], output_names = ['output'], dynamic_axes={'input' : {0 : 'batch_size'}, 'output' : {0 : 'batch_size'}})
+    
+    logger = trt.Logger(trt.Logger.ERROR)
+    builder = trt.Builder(logger)
+    network = builder.create_network(1 << int(trt.NetworkDefinitionCreationFlag.EXPLICIT_BATCH))
+
+    profile = builder.create_optimization_profile()
+    config = builder.create_builder_config()
+    config.set_flag(trt.BuilderFlag.FP16)
+    parser = trt.OnnxParser(network, logger)
+
+    with open(onnx_model_path, 'rb') as model:
+        print("parser.parse(model.read()): ",str(parser.parse(model.read())))
+        for error in range(parser.num_errors):
+            print(parser.get_error(error))
+
+    inputTensor = network.get_input(0)
+    profile.set_shape(inputTensor.name, (1,) + inputTensor.shape[1:], (8,) + inputTensor.shape[1:], (32,) + inputTensor.shape[1:])
+    config.add_optimization_profile(profile)
+
+    engineString = builder.build_serialized_network(network, config)
+    builder.build_engine(network, config)
+
+    with open(TR_output_path, 'wb') as f:
+        f.write(engineString)
+
+    return builder, network, config, profile, logger
+
+def execute_tensorrt_engine(builder, network, config, profile, logger, TR_output_path, dataloader):
+    with open(TR_output_path, "rb") as f:
+        engine = trt.Runtime(logger).deserialize_cuda_engine(f.read())
+
+    context = engine.create_execution_context()
+
+    nIO = engine.num_io_tensors
+    lTensorName = [engine.get_tensor_name(i) for i in range(nIO)]
+    nInput = [engine.get_tensor_mode(lTensorName[i]) for i in range(nIO)].count(trt.TensorIOMode.INPUT)
+
+    dataiter = iter(dataloader)
+    input, labels = next(dataiter)
+    input_shape = input.shape
+    context.set_input_shape(lTensorName[0], input_shape)
+
+    # ... rest of the code for executing the TensorRT engine ...
