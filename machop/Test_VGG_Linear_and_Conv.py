@@ -42,10 +42,8 @@ from chop.passes.graph.transforms import (
     summarize_quantization_analysis_pass,
 )
 
-from chop.passes.graph.transforms.quantize.quantize_tensorRT import tensorRT_quantize_pass,calibration_pass,export_onnx_to_tensorRT_engine_pass,test_quantize_tensorrt_transform_pass,DEMO_combine_ONNX_and_Engine
-
-from lab2_op_floppass import flop_calculator_pass,modlesize_calculator_pass
-
+from chop.passes.graph.transforms.quantize.quantize_tensorRT import tensorRT_quantize_pass,calibration_pass
+from chop.passes.graph.transforms.quantize.quantize_tensorRT import export_to_onnx_pass,generate_tensorrt_string_pass,run_tensorrt_pass
 from chop.tools.checkpoint_load import load_model
 
 from chop.plt_wrapper import get_model_wrapper
@@ -134,13 +132,12 @@ pass_args = {
 ###########################################################
 
 def run_model(mg, device, data_module, num_batches):
-    import pdb; pdb.set_trace()
     j = 0
     accs, losses = [], []
     mg.model = mg.model.to(device)
     mg.model.eval()  # Set the model to evaluation mode
     inputs_tuple = ()
-    for inputs in data_module.train_dataloader():
+    for inputs in data_module.test_dataloader():
         xs, ys = inputs
         xs, ys = xs.to(device), ys.to(device)
         preds = mg.model(xs)
@@ -151,8 +148,8 @@ def run_model(mg, device, data_module, num_batches):
         acc = correct / total  # Compute the accuracy
         accs.append(acc)  # Use .item() to get a Python number from a tensor
         losses.append(loss.item())  # Use .item() to get a Python number from a tensor
-        if j >= num_batches:  # Use >= instead of > to ensure num_batches iterations are done
-            break
+        # if j >= num_batches:  # Use >= instead of > to ensure num_batches iterations are done
+        #     break
         j += 1
         inputs_tuple += (inputs,)
     acc_avg = sum(accs) / len(accs)
@@ -167,6 +164,7 @@ device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 mg, _ = init_metadata_analysis_pass(mg, None)
 mg, _ = add_common_metadata_analysis_pass(mg, {"dummy_in": dummy_in})
 mg, _ = add_software_metadata_analysis_pass(mg, None)
+import pdb; pdb.set_trace()
 metric = MulticlassAccuracy(num_classes=5)
 metric = metric.to(device)
 num_batchs = 5
@@ -182,12 +180,10 @@ latency_list = []
 ##
 
 
-engine_str_path_ori = './testdemo_engine_ori.trt'
-
-datamodule_test = data_module.train_dataloader()
-acc,latency = DEMO_combine_ONNX_and_Engine(mg,dummy_in,data_module.train_dataloader(),input_generator,onnx_model_path = './testdemo.onnx',TR_output_path=engine_str_path_ori)
-accuracy_list.append(acc)
-latency_list.append(latency)
+# engine_str_path_ori = './testdemo_engine_ori.trt'
+# mg, _ = export_to_onnx_pass(mg, dummy_in, input_generator, onnx_model_path = './testdemo.onnx')
+# mg,_ = generate_tensorrt_string_pass(mg, TR_output_path = './testdemo_engine.trt')
+# run_tensorrt_pass(mg, dataloader = data_module.test_dataloader())
 
 ###
 # Linear Only: Quantize to 8 bites
@@ -196,20 +192,21 @@ latency_list.append(latency)
 pass_args = {
 "by": "type",
 "default": {"config": {"name": None}},
-"linear": {
-        "config": {
-            "name": "integer",
-            # data
-            "data_in_width": 6,
-            "data_in_frac_width": 4,
-            # weight
-            "weight_width": 6,
-            "weight_frac_width": 4,
-            # bias
-            "bias_width": 6,
-            "bias_frac_width": 4,
-        }
-},
+# "linear": {
+#         "config": {
+#             "name": "integer",
+#             # data
+#             "data_in_width": 6,
+#             "data_in_frac_width": 4,
+#             # weight
+#             "weight_width": 6,
+#             "weight_frac_width": 4,
+#             # bias
+#             "bias_width": 6,
+#             "bias_frac_width": 4,
+#         },
+#         "fake": False
+# },
 "conv2d":{
         "config": {
             "name": "integer",
@@ -222,110 +219,35 @@ pass_args = {
             # bias
             "bias_width": 6,
             "bias_frac_width": 4,
-},}
-
-}
-
-mg, _ = tensorRT_quantize_pass(mg, pass_args,fake = True)
-mg, _ = calibration_pass(mg, pass_args,data_module,batch_size)
-engine_str_path = './testdemo_engine.trt'
-acc,latency = DEMO_combine_ONNX_and_Engine(mg,dummy_in,data_module.train_dataloader(),input_generator,onnx_model_path = './testdemo.onnx',TR_output_path=engine_str_path)
-accuracy_list.append(acc)
-latency_list.append(latency)
-
-print(accuracy_list)
-print(latency_list)
-
-exit()
-
-###
-# Linear Only: Quantize to 16 bites
-###
-
-pass_args = {
-"by": "type",
-"default": {"config": {"name": None}},
-"linear": {
-        "config": {
-            "name": "integer",
-            # data
-            "data_in_width": 4,
-            "data_in_frac_width": 4,
-            # weight
-            "weight_width": 4,
-            "weight_frac_width": 4,
-            # bias
-            "bias_width": 4,
-            "bias_frac_width": 4,
-        }
 },
-"conv2d":{
-        "config": {
-            "name": "integer",
-            # data
-            "data_in_width": 4,
-            "data_in_frac_width": 4,
-            # weight
-            "weight_width": 4,
-            "weight_frac_width": 4,
-            # bias
-            "bias_width": 4,
-            "bias_frac_width": 4,
-},}
+"fake": False}
 
 }
+widths = [14, 12, 10, 8, 6, 4, 2]
+acc = []
+for width in widths:
+    # pass_args["linear"]["config"]["data_in_width"] = width
+    # pass_args["linear"]["config"]["weight_width"] = width
+    # pass_args["linear"]["config"]["bias_width"] = width
 
-mg, _ = tensorRT_quantize_pass(mg, pass_args,fake = True)
-mg, _ = calibration_pass(mg, pass_args,data_module,batch_size)
-engine_str_path = './testdemo_engine.trt'
-acc,latency = DEMO_combine_ONNX_and_Engine(mg,dummy_in,data_module.train_dataloader(),input_generator,onnx_model_path = './testdemo.onnx',TR_output_path=engine_str_path)
-accuracy_list.append(acc)
-latency_list.append(latency)
-
-###
-# Linear Only: Quantize to 2 bites
-###
-
-pass_args = {
-"by": "type",
-"default": {"config": {"name": None}},
-"linear": {
-        "config": {
-            "name": "integer",
-            # data
-            "data_in_width": 2,
-            "data_in_frac_width": 4,
-            # weight
-            "weight_width": 2,
-            "weight_frac_width": 4,
-            # bias
-            "bias_width": 2,
-            "bias_frac_width": 4,
-        }
-},
-"conv2d":{
-        "config": {
-            "name": "integer",
-            # data
-            "data_in_width": 2,
-            "data_in_frac_width": 4,
-            # weight
-            "weight_width": 2,
-            "weight_frac_width": 4,
-            # bias
-            "bias_width": 2,
-            "bias_frac_width": 4,
-},}
-
-}
-
-mg, _ = tensorRT_quantize_pass(mg, pass_args,fake = True)
-mg, _ = calibration_pass(mg, pass_args,data_module,batch_size)
-engine_str_path = './testdemo_engine.trt'
-acc,latency = DEMO_combine_ONNX_and_Engine(mg,dummy_in,data_module.train_dataloader(),input_generator,onnx_model_path = './testdemo.onnx',TR_output_path=engine_str_path)
-accuracy_list.append(acc)
-latency_list.append(latency)
+    pass_args["conv2d"]["config"]["data_in_width"] = width
+    pass_args["conv2d"]["config"]["weight_width"] = width
+    pass_args["conv2d"]["config"]["bias_width"] = width
+    mg, _ = tensorRT_quantize_pass(mg, pass_args,fake = True)
+    mg, _ = calibration_pass(mg, pass_args,data_module,batch_size)
+    acc_avg, loss_avg, inputs_tuple = run_model(mg,device,data_module,num_batchs)
+    acc.append(acc_avg)
+    # print("test_acc:",acc_avg)
+    # engine_str_path = './testdemo_engine.trt'
+    # mg, _ = export_to_onnx_pass(mg, dummy_in, input_generator, onnx_model_path = './testdemo.onnx')
+    # mg,_ = generate_tensorrt_string_pass(mg, TR_output_path = './testdemo_engine.trt')
+    # acc,latency = run_tensorrt_pass(mg, dataloader = data_module.test_dataloader())   
+    # accuracy_list.append(acc)
+    # latency_list.append(latency)
 
 print("-------------------------------------------------------------")
+print(widths)
 print(accuracy_list)
 print(latency_list)
+
+print(acc_avg)

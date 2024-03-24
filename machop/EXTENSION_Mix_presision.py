@@ -42,9 +42,8 @@ from chop.passes.graph.transforms import (
     summarize_quantization_analysis_pass,
 )
 
-from chop.passes.graph.transforms.quantize.quantize_tensorRT import tensorRT_quantize_pass,calibration_pass,export_onnx_to_tensorRT_engine_pass,test_quantize_tensorrt_transform_pass,DEMO_combine_ONNX_and_Engine
-
-from lab2_op_floppass import flop_calculator_pass,modlesize_calculator_pass
+from chop.passes.graph.transforms.quantize.quantize_tensorRT import tensorRT_quantize_pass,calibration_pass
+from chop.passes.graph.transforms.quantize.quantize_tensorRT import export_to_onnx_pass,generate_tensorrt_string_pass,run_tensorrt_pass
 
 from chop.tools.checkpoint_load import load_model
 
@@ -120,13 +119,12 @@ pass_args = {
 ###########################################################
 
 def run_model(mg, device, data_module, num_batches):
-    import pdb; pdb.set_trace()
     j = 0
     accs, losses = [], []
     mg.model = mg.model.to(device)
     mg.model.eval()  # Set the model to evaluation mode
     inputs_tuple = ()
-    for inputs in data_module.train_dataloader():
+    for inputs in data_module.test_dataloader():
         xs, ys = inputs
         xs, ys = xs.to(device), ys.to(device)
         preds = mg.model(xs)
@@ -168,6 +166,15 @@ latency_list = []
 # Linear Only: Quantize to 8 bites
 ###
 
+acc_avg, loss_avg, inputs_tuple = run_model(mg, device, data_module, num_batchs)
+print(f"Accuracy: {acc_avg}, Loss: {loss_avg}")
+
+# mg, _ = calibration_pass(mg, pass_args,data_module,batch_size)
+engine_str_path = './testdemo_engine.trt'
+# acc,latency = DEMO_combine_ONNX_and_Engine(mg,dummy_in,data_module.test_dataloader(),input_generator,onnx_model_path = './testdemo.onnx',TR_output_path=engine_str_path)
+# accuracy_list.append(acc)
+# latency_list.append(latency)
+
 pass_args = {
 "by": "name",
 "default": {"config": {"name": None}},
@@ -183,27 +190,55 @@ pass_args = {
             # bias
             "bias_width": 8,
             "bias_frac_width": 4,
-        }
+        },
+        "fake": "False"
 },
-"classifier_2": {
-        "config": {
-            "name": "integer",
-            # data
-            "data_in_width": 12,
-            "data_in_frac_width": 4,
-            # weight
-            "weight_width": 12,
-            "weight_frac_width": 4,
-            # bias
-            "bias_width": 12,
-            "bias_frac_width": 4,
-        }
-},
+# "classifier_2": {
+#         "config": {
+#             "name": "integer",
+#             # data
+#             "data_in_width": 8,
+#             "data_in_frac_width": 4,
+#             # weight
+#             "weight_width": 8,
+#             "weight_frac_width": 4,
+#             # bias
+#             "bias_width": 8,
+#             "bias_frac_width": 4,
+#         }
+# },
 }
 
-mg, _ = tensorRT_quantize_pass(mg, pass_args,fake = True)
-mg, _ = calibration_pass(mg, pass_args,data_module,batch_size)
-engine_str_path = './testdemo_engine.trt'
-acc,latency = DEMO_combine_ONNX_and_Engine(mg,dummy_in,data_module.train_dataloader(),input_generator,onnx_model_path = './testdemo.onnx',TR_output_path=engine_str_path)
-accuracy_list.append(acc)
-latency_list.append(latency)
+# engine_str_path_ori = './testdemo_engine_ori.trt'
+# datamodule_test = data_module
+# acc,latency = DEMO_combine_ONNX_and_Engine(mg,dummy_in,data_module.test_dataloader(),input_generator,onnx_model_path = './testdemo_ori_VGG.onnx',TR_output_path=engine_str_path_ori)
+# accuracy_list.append(acc)
+# latency_list.append(latency)
+
+widths = [8,6,4,2]
+for width in widths:
+    pass_args["classifier_0"]["config"]["data_in_width"] = width
+    pass_args["classifier_0"]["config"]["weight_width"] = width
+    pass_args["classifier_0"]["config"]["bias_width"] = width
+
+    # pass_args["classifier_2"]["config"]["data_in_width"] = width
+    # pass_args["classifier_2"]["config"]["weight_width"] = width
+    # pass_args["classifier_2"]["config"]["bias_width"] = width
+
+    mg, _ = tensorRT_quantize_pass(mg, pass_args,fake = False)
+    # acc_avg, loss_avg, inputs_tuple = run_model(mg, device, data_module, num_batchs)
+    # print(f"Accuracy: {acc_avg}, Loss: {loss_avg}")
+    # import pdb; pdb.set_trace()
+    # mg, _ = calibration_pass(mg, pass_args,data_module,batch_size)
+    # engine_str_path = './testdemo_engine.trt'
+    mg, _ = export_to_onnx_pass(mg, dummy_in, input_generator, onnx_model_path = './testdemo.onnx')
+    mg,_ = generate_tensorrt_string_pass(mg, TR_output_path = './testdemo_engine.trt')
+    acc,latency = run_tensorrt_pass(mg, dataloader = data_module.test_dataloader())   
+    accuracy_list.append(acc)
+    latency_list.append(latency)
+
+# print(widths)
+
+print(f"Accuracy: {acc_avg}, Loss: {loss_avg}")
+print(accuracy_list)
+print(latency_list)
