@@ -144,7 +144,6 @@ def graph_iterator_quantize_by_type_tensorRT_name(graph, config: dict):
                 bl_graph, node.next
             )  # Certain modules will require information about their successor module to complete the initialization process. (For LogicNets, activation functions are needed.)
             bl_module = get_similar_node_actual_target(bl_graph, node)
-            import pdb; pdb.set_trace()
             if config[node.name]['fake'] == "True":
                 new_module = create_new_module_tensorRT(
                     get_mase_op(node),
@@ -184,7 +183,20 @@ def graph_iterator_quantize_by_type_tensorRT_name(graph, config: dict):
             graph.fx_graph.erase_node(node)
     return graph
 
-def tensorRT_quantize_pass(graph, pass_args=None,fake = False):
+def tensorRT_quantize_pass(graph, pass_args=None):
+    """_summary_
+
+    Args:
+        graph (Mase Graph): Input Mase Graph
+        pass_args (dic, optional): _description_. Defaults to None.
+        fake (bool, optional): _description_. Defaults to False.
+
+    Raises:
+        ValueError: _description_
+
+    Returns:
+        _type_: _description_
+    """
     print("hello world")
     by = pass_args["by"]
     match by:

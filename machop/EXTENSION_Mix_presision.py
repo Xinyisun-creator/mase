@@ -6,6 +6,8 @@ from pprint import pprint as pp
 import time
 import onnx
 import tensorrt as trt
+import json
+from datetime import datetime
 ###########################################################
 # Read me!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!#
 #
@@ -120,14 +122,21 @@ pass_args = {
 
 def run_model(mg, device, data_module, num_batches):
     j = 0
-    accs, losses = [], []
+    accs, losses, latencies = [], [], []
     mg.model = mg.model.to(device)
     mg.model.eval()  # Set the model to evaluation mode
     inputs_tuple = ()
     for inputs in data_module.test_dataloader():
         xs, ys = inputs
         xs, ys = xs.to(device), ys.to(device)
+        
+        start_time = time.time()  # Start timing
         preds = mg.model(xs)
+        end_time = time.time()  # End timing
+        
+        latency = end_time - start_time  # Compute the latency
+        latencies.append(latency)  # Add the latency to the list
+        
         loss = torch.nn.functional.cross_entropy(preds, ys)
         _, predicted = torch.max(preds, 1)  # Get the predicted classes
         correct = (predicted == ys).sum().item()  # Compute the number of correct predictions
@@ -141,7 +150,8 @@ def run_model(mg, device, data_module, num_batches):
         inputs_tuple += (inputs,)
     acc_avg = sum(accs) / len(accs)
     loss_avg = sum(losses) / len(losses)
-    return acc_avg, loss_avg, inputs_tuple
+    latency_avg = sum(latencies) / len(latencies)  # Compute the average latency
+    return acc_avg, loss_avg, latency_avg, inputs_tuple
 
 
 
@@ -154,10 +164,11 @@ mg, _ = add_software_metadata_analysis_pass(mg, None)
 
 metric = MulticlassAccuracy(num_classes=5)
 metric = metric.to(device)
-num_batchs = 5
-accuracy_list = []
-latency_list = []
-
+num_batchs = 8
+accuracy_tensorRT = []
+latency_tensorRT = []
+accuracy_runmodel = []
+latency_runmodel = []
 #########################################################
 #      Experiment PART 1: Original Graph
 #########################################################
@@ -166,14 +177,16 @@ latency_list = []
 # Linear Only: Quantize to 8 bites
 ###
 
-acc_avg, loss_avg, inputs_tuple = run_model(mg, device, data_module, num_batchs)
-print(f"Accuracy: {acc_avg}, Loss: {loss_avg}")
+acc_avg, loss_avg, latency_avg, inputs_tuple = run_model(mg, device, data_module, num_batchs)
+accuracy_runmodel.append(acc_avg)
+latency_runmodel.append(latency_avg)
 
-# mg, _ = calibration_pass(mg, pass_args,data_module,batch_size)
 engine_str_path = './testdemo_engine.trt'
-# acc,latency = DEMO_combine_ONNX_and_Engine(mg,dummy_in,data_module.test_dataloader(),input_generator,onnx_model_path = './testdemo.onnx',TR_output_path=engine_str_path)
-# accuracy_list.append(acc)
-# latency_list.append(latency)
+mg, _ = export_to_onnx_pass(mg, dummy_in, input_generator, onnx_model_path = './testdemo.onnx')
+mg,_ = generate_tensorrt_string_pass(mg, TR_output_path = './testdemo_engine.trt')
+acc,latency = run_tensorrt_pass(mg, dataloader = data_module.test_dataloader())   
+accuracy_tensorRT.append(acc)
+latency_tensorRT.append(latency)
 
 pass_args = {
 "by": "name",
@@ -191,7 +204,7 @@ pass_args = {
             "bias_width": 8,
             "bias_frac_width": 4,
         },
-        "fake": "False"
+        "fake": "True"
 },
 # "classifier_2": {
 #         "config": {
@@ -215,7 +228,8 @@ pass_args = {
 # accuracy_list.append(acc)
 # latency_list.append(latency)
 
-widths = [8,6,4,2]
+widths = [16,14,12,10,8,6,4,2]
+calibration = True
 for width in widths:
     pass_args["classifier_0"]["config"]["data_in_width"] = width
     pass_args["classifier_0"]["config"]["weight_width"] = width
@@ -225,20 +239,41 @@ for width in widths:
     # pass_args["classifier_2"]["config"]["weight_width"] = width
     # pass_args["classifier_2"]["config"]["bias_width"] = width
 
-    mg, _ = tensorRT_quantize_pass(mg, pass_args,fake = False)
-    # acc_avg, loss_avg, inputs_tuple = run_model(mg, device, data_module, num_batchs)
+    mg, _ = tensorRT_quantize_pass(mg, pass_args)
+    acc_avg, loss_avg, latency_avg, inputs_tuple = run_model(mg, device, data_module, num_batchs)
     # print(f"Accuracy: {acc_avg}, Loss: {loss_avg}")
     # import pdb; pdb.set_trace()
-    # mg, _ = calibration_pass(mg, pass_args,data_module,batch_size)
+    if calibration == True:
+        mg, _ = calibration_pass(mg, pass_args,data_module,batch_size)  
     # engine_str_path = './testdemo_engine.trt'
     mg, _ = export_to_onnx_pass(mg, dummy_in, input_generator, onnx_model_path = './testdemo.onnx')
     mg,_ = generate_tensorrt_string_pass(mg, TR_output_path = './testdemo_engine.trt')
     acc,latency = run_tensorrt_pass(mg, dataloader = data_module.test_dataloader())   
-    accuracy_list.append(acc)
-    latency_list.append(latency)
+    accuracy_tensorRT.append(acc)
+    latency_tensorRT.append(latency)
+    accuracy_runmodel.append(acc_avg)
+    latency_runmodel.append(latency_avg)
 
-# print(widths)
+# print experiment results
+print("widths: ",["Original Graph"] + widths)
+print("TensorRT Accuracy: ",accuracy_tensorRT)
+print("TensorRT Latency: ",latency_tensorRT)
+print("Run Model Accuracy: ",accuracy_runmodel)
+print("Run Model Latency: ",latency_runmodel)
 
-print(f"Accuracy: {acc_avg}, Loss: {loss_avg}")
-print(accuracy_list)
-print(latency_list)
+# Store results in a dictionary
+results = {
+    "widths": ["Original Graph"] + widths,
+    "TensorRT Accuracy": accuracy_tensorRT,
+    "TensorRT Latency": latency_tensorRT,
+    "Run Model Accuracy": accuracy_runmodel,
+    "Run Model Latency": latency_runmodel,
+    "pass_args": pass_args  # Store pass_args information
+}
+
+# Generate a timestamp
+timestamp = datetime.now().strftime('%Y%m%d%H%M%S')
+
+# Write results to a JSON file with a timestamp in its name
+with open(f'Pytorch_Quantization_Experiment_result/results_{pass_args["by"]}_{timestamp}.json', 'w') as f:
+    json.dump(results, f)
