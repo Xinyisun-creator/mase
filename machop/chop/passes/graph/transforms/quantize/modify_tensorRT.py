@@ -19,7 +19,6 @@ import pytorch_quantization.nn as quant_nn
 
 from pytorch_quantization import tensor_quant
 from cuda import cudart
-
 import onnx
 import tensorrt as trt
 

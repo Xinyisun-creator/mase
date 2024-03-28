@@ -23,6 +23,11 @@ from .modify import create_new_fn, create_new_module
 from .modify_tensorRT import create_new_module_tensorRT,create_new_module_tensorRT_real
 from .quant_parsers import parse_node_config, relink_node_meta, update_quant_meta_param
 from .summary import graph_iterator_compare_nodes, graph_iterator_node_histogram
+from pytorch_quantization.nn.modules.tensor_quantizer import TensorQuantizer
+import pytorch_quantization.calib as calib
+
+import tqdm
+
 
 logger = logging.getLogger(__name__)
 
@@ -47,6 +52,53 @@ QUANTIZEABLE_OP = (
     "max_pool2d"
 )
 
+def run_model_for_test(mg, device, data_module, num_batches):
+    """
+
+    run_model_for_test: 
+    - Before running model in tensorRT, we can use the function to test the model at first. To check whether it is successfully quantized.
+
+    Args:
+        mg (mase graph): the mase graph.
+        device : CPU or GPU.
+        data_module : Dataset.
+        num_batches : Integer, the number of batches to run. exp: 8.
+
+    Returns:
+        acc_avg: The average accuracy after all dataset running successully.
+        loss_avg: The average loss after all dataset running successully.
+        laten
+    """
+    j = 0
+    accs, losses, latencies = [], [], []
+    mg.model = mg.model.to(device)
+    mg.model.eval()  # Set the model to evaluation mode
+    inputs_tuple = ()
+    for inputs in data_module.test_dataloader():
+        xs, ys = inputs
+        xs, ys = xs.to(device), ys.to(device)
+        
+        start_time = time.time()  # Start timing
+        preds = mg.model(xs)
+        end_time = time.time()  # End timing
+        
+        latency = end_time - start_time  # Compute the latency
+        latencies.append(latency)  # Add the latency to the list
+        
+        loss = torch.nn.functional.cross_entropy(preds, ys)
+        _, predicted = torch.max(preds, 1)  # Get the predicted classes
+        correct = (predicted == ys).sum().item()  # Compute the number of correct predictions
+        total = ys.size(0)  # Total number of images
+        acc = correct / total  # Compute the accuracy
+        accs.append(acc)  # Use .item() to get a Python number from a tensor
+        losses.append(loss.item())  # Use .item() to get a Python number from a tensor
+        if j >= num_batches:  # Use >= instead of > to ensure num_batches iterations are done
+            break
+        j += 1
+    acc_avg = sum(accs) / len(accs)
+    loss_avg = sum(losses) / len(losses)
+    latency_avg = sum(latencies) / len(latencies)  # Compute the average latency
+    return acc_avg, loss_avg, latency_avg
 
 def get_config(config: dict, name: str):
     if name in config:
@@ -188,14 +240,10 @@ def tensorRT_quantize_pass(graph, pass_args=None):
 
     Args:
         graph (Mase Graph): Input Mase Graph
-        pass_args (dic, optional): _description_. Defaults to None.
-        fake (bool, optional): _description_. Defaults to False.
-
-    Raises:
-        ValueError: _description_
+        pass_args (dic, Compulsory): The Configuration about quantization.
 
     Returns:
-        _type_: _description_
+        graph: Maze Graph after quantization. The configured model will be replaced by a new quantization model.
     """
     print("hello world")
     by = pass_args["by"]
@@ -210,8 +258,56 @@ def tensorRT_quantize_pass(graph, pass_args=None):
     # link the model with graph
     graph.model = torch.fx.GraphModule(graph.model, graph.fx_graph)
     return graph, {}
+def collect_stats(model, data_loader, num_batches):
+     """Feed data to the network and collect statistic"""
+     # Enable calibrators
+     for name, module in model.named_modules():
+         if isinstance(module, TensorQuantizer):
+             if module._calibrator is not None:
+                 module.disable_quant()
+                 module.enable_calib()
+             else:
+                 module.disable()
 
-def calibration_pass(graph, pass_args=None,data_module=None,batch_size=8):
+     for i, (image, _) in tqdm(enumerate(data_loader), total=num_batches):
+         model(image.cuda())
+         if i >= num_batches:
+             break
+
+     # Disable calibrators
+     for name, module in model.named_modules():
+         if isinstance(module, TensorQuantizer):
+             if module._calibrator is not None:
+                 module.enable_quant()
+                 module.disable_calib()
+             else:
+                 module.enable()
+
+def compute_amax(model, **kwargs):
+     # Load calib result
+     for name, module in model.named_modules():
+         if isinstance(module, TensorQuantizer):
+             if module._calibrator is not None:
+                 if isinstance(module._calibrator, calib.MaxCalibrator):
+                     module.load_calib_amax()
+                 else:
+                     module.load_calib_amax(**kwargs)
+             print(F"{name:40}: {module}")
+     model.cuda()
+
+
+
+def calibration_pass(graph, data_module,batch_size=8):
+    """_summary_
+
+    Args:
+        graph (Mase Graph): Mase Graph
+        data_module (MaseDataModule): Provide the dummy input data to calibration.
+        batch_size (int, optional): Defaults to 8.
+
+    Returns:
+        Graph: Mase Graph after calibration. The quantzied module will contain a new attribute "amax" which is the maximum absolute value of the calibration data.
+    """
     device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
     graph.model.to(device)
     for name in graph.modules.keys():
@@ -243,6 +339,17 @@ def calibration_pass(graph, pass_args=None,data_module=None,batch_size=8):
     return graph, {}
 
 def export_to_onnx_pass(mg, dummy_in, input_generator, onnx_model_path):
+    """_summary_
+
+    Args:
+        mg (Mase Graph): Mase Graph
+        dummy_in (tensor): The dummy input data from the next iteration of the input_generator. Only been used for taking the shape of the input tensor.
+        input_generator (InputGenerator(class)): Input generator.
+        onnx_model_path (str): provide the path to save the onnx model. 
+
+    Returns:
+        mg: the Mase Graph with the onnx model path in the meta. 
+    """
     dummy_in = next(iter(input_generator))['x']
     dummy_in = dummy_in.cuda()
     testdevice = torch.device('cpu')
@@ -252,6 +359,15 @@ def export_to_onnx_pass(mg, dummy_in, input_generator, onnx_model_path):
     return  mg, {}
 
 def generate_tensorrt_string_pass(mg, TR_output_path):
+    """_summary_
+
+    Args:
+        mg (Mase Graph): The masegraph with the onnx model path in the "meta".
+        TR_output_path (str): The path to save the tensorRT engine string.
+
+    Returns:
+        mg: The masegraph with the tensorRT engine string in the "meta".
+    """
     logger = trt.Logger(trt.Logger.ERROR)
     builder = trt.Builder(logger)
     network = builder.create_network(1 << int(trt.NetworkDefinitionCreationFlag.EXPLICIT_BATCH))
@@ -280,7 +396,104 @@ def generate_tensorrt_string_pass(mg, TR_output_path):
 
     return mg,{}
 
+def run_tensorRT_without_String(mg,dataloader):
+    """_summary_
+
+    Args:
+        mg (Mase Graph): The masegraph with the onnx model path in the "meta".
+        TR_output_path (str): The path to save the tensorRT engine string.
+
+    Returns:
+        mg: The masegraph with the tensorRT engine string in the "meta".
+    """
+    logger = trt.Logger(trt.Logger.ERROR)
+    builder = trt.Builder(logger)
+    network = builder.create_network(1 << int(trt.NetworkDefinitionCreationFlag.EXPLICIT_BATCH))
+    onnx_model_path = mg.meta["onnx_model_path"]
+
+    profile = builder.create_optimization_profile()
+    config = builder.create_builder_config()
+    config.set_flag(trt.BuilderFlag.FP16)
+    parser = trt.OnnxParser(network, logger)
+
+    with open(onnx_model_path, 'rb') as model:
+        print("parser.parse(model.read()): ",str(parser.parse(model.read())))
+        for error in range(parser.num_errors):
+            print(parser.get_error(error))
+
+    inputTensor = network.get_input(0)
+    profile.set_shape(inputTensor.name, (1,) + inputTensor.shape[1:], (8,) + inputTensor.shape[1:], (32,) + inputTensor.shape[1:])
+    config.add_optimization_profile(profile)
+    
+    engineString = builder.build_serialized_network(network, config)
+    mg.meta["tensorRT_string"] = engineString
+    engine = builder.build_engine(network, config)
+
+    logger = trt.Logger(trt.Logger.ERROR)
+    context = engine.create_execution_context()
+
+    nIO = engine.num_io_tensors
+    lTensorName = [engine.get_tensor_name(i) for i in range(nIO)]
+    nInput = [engine.get_tensor_mode(lTensorName[i]) for i in range(nIO)].count(trt.TensorIOMode.INPUT)
+
+    dataiter = iter(dataloader)
+    input, labels = next(dataiter)
+    input_shape = input.shape
+    context.set_input_shape(lTensorName[0], input_shape)
+
+    execute_time = []
+    accuracy = []
+
+    for inputs in dataloader:
+        data, label = inputs
+        bufferH = []
+        bufferH.append(np.ascontiguousarray(data))
+        for i in range(nInput, nIO):
+            bufferH.append(np.zeros(context.get_tensor_shape(lTensorName[i]), dtype=trt.nptype(engine.get_tensor_dtype(lTensorName[i]))))
+        bufferD = []
+        for i in range(nIO):
+            bufferD.append(cudart.cudaMalloc(bufferH[i].nbytes)[1])
+
+        for i in range(nInput):
+            cudart.cudaMemcpy(bufferD[i], bufferH[i].ctypes.data, bufferH[i].nbytes, cudart.cudaMemcpyKind.cudaMemcpyHostToDevice)
+
+        for i in range(nIO):
+            context.set_tensor_address(lTensorName[i], int(bufferD[i]))
+
+        start_time = time.time()
+        context.execute_async_v3(0)
+        end_time = time.time()
+        execute_time.append(end_time - start_time)
+
+        for i in range(nInput, nIO):
+            cudart.cudaMemcpy(bufferH[i].ctypes.data, bufferD[i], bufferH[i].nbytes, cudart.cudaMemcpyKind.cudaMemcpyDeviceToHost)
+            categories = np.argmax(bufferH[nInput], axis=1)
+            acc = np.sum(categories == np.array(label)) / len(label)
+            accuracy.append(acc)
+
+            for b in bufferD:
+                cudart.cudaFree(b)
+
+    print("Succeeded running model in TensorRT!")
+    print("Average execute time for one batch: %.2fms" % (sum(execute_time) / len(execute_time) * 1000))
+    print("Total accuracy: %.2f%%" % (sum(accuracy) / len(accuracy) * 100))
+
+    avg_accuracy = sum(accuracy) / len(accuracy) * 100
+    avg_latency = sum(execute_time) / len(execute_time) * 1000
+    return avg_accuracy,avg_latency
+
+
 def run_tensorrt_pass(mg, dataloader):
+    """_summary_
+
+    Args:
+        mg (mase graph): The mase graph with the tensorRT engine string in the "meta".
+        dataloader: The dataloader.
+
+    Returns:
+        avg_accuracy: The avergae accuracy after all dataset running successully.
+        avg_latency: The average latency per one batch after all dataset running successully.
+    """
     logger = trt.Logger(trt.Logger.ERROR)
     engine = trt.Runtime(logger).deserialize_cuda_engine(mg.meta["tensorRT_string"])
     context = engine.create_execution_context()
@@ -330,4 +543,7 @@ def run_tensorrt_pass(mg, dataloader):
     print("Succeeded running model in TensorRT!")
     print("Average execute time for one batch: %.2fms" % (sum(execute_time) / len(execute_time) * 1000))
     print("Total accuracy: %.2f%%" % (sum(accuracy) / len(accuracy) * 100))
-    return (sum(accuracy) / len(accuracy) * 100),(sum(execute_time) / len(execute_time) * 1000)
+
+    avg_accuracy = sum(accuracy) / len(accuracy) * 100
+    avg_latency = sum(execute_time) / len(execute_time) * 1000
+    return avg_accuracy,avg_latency
